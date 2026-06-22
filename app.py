@@ -1,8 +1,8 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
-import mysql.connector
-from mysql.connector import Error
+import psycopg2
+from psycopg2 import Error
 import os
 import glob
 from datetime import datetime
@@ -17,24 +17,18 @@ CORS(app, supports_credentials=True)
 # MySQL Database Configuration
 DB_CONFIG = {
     'host': os.environ.get('DB_HOST', 'localhost'),
-    'user': os.environ.get('DB_USER', 'root'),
+    'user': os.environ.get('DB_USER', 'postgres'),
     'password': os.environ.get('DB_PASSWORD', ''),
     'database': os.environ.get('DB_NAME', 'inventory_system'),
-    'port': int(os.environ.get('DB_PORT', 3306))
+    'port': int(os.environ.get('DB_PORT', 5432))
 }
-
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads', 'avatars')
-ALLOWED_AVATAR_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-MAX_AVATAR_SIZE = 2 * 1024 * 1024  # 2 MB
-
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def get_db_connection():
     try:
-        conn = mysql.connector.connect(**DB_CONFIG)
+        conn = psycopg2.connect(**DB_CONFIG)
         return conn
     except Error as err:
-        print(f"Error connecting to MySQL: {err}")
+        print(f"Error connecting to PostgreSQL: {err}")
         raise
 
 def get_db_connection_no_db():
@@ -49,15 +43,13 @@ def get_db_connection_no_db():
         raise
 
 def init_db():
-    """Initialize the MySQL database with required tables"""
+    """Initialize the PostgreSQL database with required tables"""
     try:
-        # First, connect without specifying database to create it
-        conn = get_db_connection_no_db()
+        # PostgreSQL database already exists on Render, just connect
+        conn = get_db_connection()
         c = conn.cursor()
         
-        # Create database if not exists
-        db_name = DB_CONFIG['database']
-        c.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
+        # Create tables
         conn.commit()
         c.close()
         conn.close()
@@ -68,7 +60,7 @@ def init_db():
         c = conn.cursor()
 
         c.execute('''CREATE TABLE IF NOT EXISTS users (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             username VARCHAR(255) UNIQUE NOT NULL,
             password_hash VARCHAR(255) NOT NULL,
             full_name VARCHAR(255) NOT NULL,
@@ -78,7 +70,7 @@ def init_db():
         )''')
 
         c.execute('''CREATE TABLE IF NOT EXISTS inventory (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             description VARCHAR(500) NOT NULL,
             model VARCHAR(255),
             specs TEXT,
@@ -89,11 +81,11 @@ def init_db():
             acquired_by VARCHAR(255),
             location_installed VARCHAR(500),
             remarks TEXT,
-            date_entry DATETIME DEFAULT CURRENT_TIMESTAMP,
+            date_entry TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             entry_by VARCHAR(255),
             user_id INT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
         )''')
 
