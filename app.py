@@ -10,11 +10,19 @@ from functools import wraps
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
+# Configuration constants
+MAX_AVATAR_SIZE = 2 * 1024 * 1024  # 2 MB
+ALLOWED_AVATAR_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static/uploads/avatars')
+
+# Ensure upload folder exists
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'inventory-dev-secret-change-in-production')
 CORS(app, supports_credentials=True)
 
-# MySQL Database Configuration
+# PostgreSQL Database Configuration
 DB_CONFIG = {
     'host': os.environ.get('DB_HOST', 'localhost'),
     'user': os.environ.get('DB_USER', 'postgres'),
@@ -31,31 +39,10 @@ def get_db_connection():
         print(f"Error connecting to PostgreSQL: {err}")
         raise
 
-def get_db_connection_no_db():
-    """Connect to MySQL without specifying a database (for initial setup)"""
-    try:
-        config = DB_CONFIG.copy()
-        config.pop('database')  # Remove database parameter
-        conn = mysql.connector.connect(**config)
-        return conn
-    except Error as err:
-        print(f"Error connecting to MySQL: {err}")
-        raise
-
 def init_db():
     """Initialize the PostgreSQL database with required tables"""
     try:
         # PostgreSQL database already exists on Render, just connect
-        conn = get_db_connection()
-        c = conn.cursor()
-        
-        # Create tables
-        conn.commit()
-        c.close()
-        conn.close()
-        print(f"✓ Database '{db_name}' ready")
-        
-        # Now connect to the database and create tables
         conn = get_db_connection()
         c = conn.cursor()
 
@@ -89,8 +76,11 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
         )''')
 
-        # Check if profile_pic column exists
-        c.execute("SHOW COLUMNS FROM users LIKE 'profile_pic'")
+        # Check if profile_pic column exists using PostgreSQL method
+        c.execute("""
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name='users' AND column_name='profile_pic'
+        """)
         if not c.fetchone():
             c.execute('ALTER TABLE users ADD COLUMN profile_pic VARCHAR(255)')
 
@@ -102,7 +92,7 @@ def init_db():
         raise
 
 def dict_from_row(cursor, row):
-    """Convert MySQL cursor result to dictionary"""
+    """Convert cursor result to dictionary"""
     if row is None:
         return None
     return dict(zip([desc[0] for desc in cursor.description], row))
@@ -261,10 +251,12 @@ def auth_register():
             (username, generate_password_hash(password), full_name, 'admin')
         )
         conn.commit()
-        user_id = c.lastrowid
+        # PostgreSQL way to get last insert ID
+        c.execute("SELECT LASTVAL()")
+        user_id = c.fetchone()[0]
     except Error as e:
         conn.close()
-        if 'Duplicate entry' in str(e):
+        if 'duplicate key' in str(e).lower():
             return jsonify({'error': 'Username already exists'}), 400
         return jsonify({'error': str(e)}), 500
     finally:
@@ -516,12 +508,12 @@ def get_inventory():
         params = []
 
         if search:
-            query += " AND (description LIKE %s OR model LIKE %s OR rv_number LIKE %s)"
+            query += " AND (description ILIKE %s OR model ILIKE %s OR rv_number ILIKE %s)"
             search_term = f"%{search}%"
             params.extend([search_term, search_term, search_term])
 
         if location:
-            query += " AND location_installed LIKE %s"
+            query += " AND location_installed ILIKE %s"
             params.append(f"%{location}%")
 
         query += " ORDER BY date_entry DESC"
@@ -592,12 +584,14 @@ def create_inventory_item():
         )
 
         conn.commit()
-        item_id = c.lastrowid
+        # PostgreSQL way to get last insert ID
+        c.execute("SELECT LASTVAL()")
+        item_id = c.fetchone()[0]
         conn.close()
 
         return jsonify({'id': item_id, 'message': 'Item created successfully'}), 201
     except Error as e:
-        if 'Duplicate entry' in str(e):
+        if 'duplicate key' in str(e).lower():
             return jsonify({'error': 'RV# already exists'}), 400
         return jsonify({'error': str(e)}), 500
     except Exception as e:
