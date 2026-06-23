@@ -22,14 +22,6 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'inventory-dev-secret-change-in-production')
 CORS(app, supports_credentials=True)
 
-# Option A: Initialize DB on startup when requested (safe: uses IF NOT EXISTS)
-if os.environ.get('INIT_DB_ON_STARTUP', 'false').lower() in ('1', 'true', 'yes'):
-    try:
-        init_db()  # function defined later in this file
-    except Exception as e:
-        # Don't crash the app on startup if DB init fails; log and continue
-        print(f"Database initialization on startup failed: {e}")
-
 # PostgreSQL Database Configuration
 DB_CONFIG = {
     'host': os.environ.get('DB_HOST', 'localhost'),
@@ -103,6 +95,14 @@ def init_db():
     except Error as err:
         print(f"Error initializing database: {err}")
         raise
+
+# Option A: Initialize DB on startup when requested (safe: uses IF NOT EXISTS)
+if os.environ.get('INIT_DB_ON_STARTUP', 'false').lower() in ('1', 'true', 'yes'):
+    try:
+        init_db()
+    except Exception as e:
+        # Don't crash the app on startup if DB init fails; log and continue
+        print(f"Database initialization on startup failed: {e}")
 
 def dict_from_row(cursor, row):
     """Convert cursor result to dictionary"""
