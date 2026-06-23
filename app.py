@@ -742,7 +742,9 @@ def get_stats():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    init_db()
+    # Database initialization is performed only when the INIT_DB_ON_STARTUP
+    # environment variable is explicitly set. This prevents accidental
+    # schema creation or app startup failures when the DB is unreachable.
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=debug)
