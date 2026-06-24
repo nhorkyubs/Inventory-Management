@@ -516,6 +516,11 @@ def get_inventory():
 
         search = request.args.get('search', '')
         location = request.args.get('location', '')
+        type_filter = request.args.get('type', 'all')
+
+        # Patterns for heuristic classification
+        device_pattern = r'(laptop|printer|desktop|server|monitor|router|switch|projector|tablet|phone|scanner)'
+        consumable_pattern = r'(paper|ink|toner|cartridge|battery|label|staple|staples|pen|tape)'
 
         query = "SELECT * FROM inventory WHERE 1=1"
         params = []
@@ -528,6 +533,14 @@ def get_inventory():
         if location:
             query += " AND location_installed ILIKE %s"
             params.append(f"%{location}%")
+
+        if type_filter and type_filter != 'all':
+            if type_filter == 'devices':
+                query += " AND (description ~* %s OR model ~* %s OR specs ~* %s)"
+                params.extend([device_pattern, device_pattern, device_pattern])
+            elif type_filter == 'consumables':
+                query += " AND (description ~* %s OR model ~* %s OR specs ~* %s)"
+                params.extend([consumable_pattern, consumable_pattern, consumable_pattern])
 
         query += " ORDER BY date_entry DESC"
 
@@ -679,14 +692,31 @@ def delete_inventory_item(item_id):
 @app.route('/api/inventory/export/csv', methods=['GET'])
 @login_required
 def export_csv():
-    """Export inventory to CSV"""
+    """Export inventory to CSV with optional type filtering"""
     try:
         import csv
         from io import StringIO
 
+        type_filter = request.args.get('type', 'all')
+        device_pattern = r'(laptop|printer|desktop|server|monitor|router|switch|projector|tablet|phone|scanner)'
+        consumable_pattern = r'(paper|ink|toner|cartridge|battery|label|staple|staples|pen|tape)'
+
         conn = get_db_connection()
         c = conn.cursor()
-        c.execute("SELECT * FROM inventory ORDER BY date_entry DESC")
+
+        base_query = "SELECT * FROM inventory WHERE 1=1"
+        params = []
+
+        if type_filter and type_filter != 'all':
+            if type_filter == 'devices':
+                base_query += " AND (description ~* %s OR model ~* %s OR specs ~* %s)"
+                params.extend([device_pattern, device_pattern, device_pattern])
+            elif type_filter == 'consumables':
+                base_query += " AND (description ~* %s OR model ~* %s OR specs ~* %s)"
+                params.extend([consumable_pattern, consumable_pattern, consumable_pattern])
+
+        base_query += " ORDER BY date_entry DESC"
+        c.execute(base_query, params)
         rows = c.fetchall()
 
         if not rows:
@@ -704,8 +734,9 @@ def export_csv():
             row_dict = dict(zip(fieldnames, row))
             writer.writerow(row_dict)
 
+        filename = f"inventory_{type_filter}_{datetime.now().date()}.csv"
         return output.getvalue(), 200, {
-            'Content-Disposition': 'attachment; filename="inventory.csv"',
+            'Content-Disposition': f'attachment; filename="{filename}"',
             'Content-Type': 'text/csv'
         }
     except Exception as e:
