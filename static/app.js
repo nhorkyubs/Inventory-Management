@@ -193,6 +193,19 @@ async function getFromIndexedDB() {
     });
 }
 
+async function deleteFromIndexedDB(itemId) {
+    if (!db) return;
+
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.delete(itemId);
+
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve();
+    });
+}
+
 function setupEventListeners() {
     window.addEventListener('online', () => {
         isOnline = true;
@@ -859,6 +872,9 @@ async function deleteItem(id) {
         });
 
         if (!response.ok) throw new Error('Failed to delete item');
+
+        // Delete from IndexedDB cache
+        await deleteFromIndexedDB(id);
 
         showAlert('Item deleted successfully!', 'success');
         loadInventory();
