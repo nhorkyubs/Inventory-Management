@@ -74,7 +74,7 @@ function applyRoleUI() {
         if (logoutBtn) logoutBtn.style.display = 'inline-block';
         if (backBtn) backBtn.style.display = 'none';
         if (userInfo) userInfo.style.display = '';
-        if (lastCol) lastCol.textContent = 'Actions';
+        if (lastCol) lastCol.textContent = 'Entry By';
         if (createAdminSection) {
             createAdminSection.style.display = isSuperAdmin ? 'block' : 'none';
         }
@@ -730,9 +730,12 @@ async function handleCreateAdmin(e) {
     }
 }
 
+// DELETION LOGS - Retrieve and Permanent Delete
+let currentDeletedItemId = null;
+
 async function loadDeletedLogs() {
     const tbody = document.getElementById('logsTableBody');
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><h3>Loading...</h3></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><h3>Loading...</h3></td></tr>';
 
     try {
         const response = await apiFetch('/api/logs/deleted');
@@ -740,7 +743,7 @@ async function loadDeletedLogs() {
         const logs = await response.json();
 
         if (logs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><h3>No deleted items</h3></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><h3>No deleted items</h3></td></tr>';
             return;
         }
 
@@ -751,11 +754,84 @@ async function loadDeletedLogs() {
                 <td>${log.entry_by ? escapeHtml(log.entry_by) : '-'}</td>
                 <td>${log.deleted_by ? escapeHtml(log.deleted_by) : '-'}</td>
                 <td>${log.deleted_at ? new Date(log.deleted_at).toLocaleString() : '-'}</td>
+                <td>
+                    <div class="action-btns">
+                        <button class="btn btn-secondary" onclick="restoreDeletedItem(${log.id})" title="Restore to inventory">Restore</button>
+                        <button class="btn btn-danger" onclick="openPermanentDeleteModal(${log.id})" title="Permanently delete">Delete</button>
+                    </div>
+                </td>
             </tr>
         `).join('');
     } catch (error) {
         console.error('Error loading logs:', error);
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><h3>Failed to load logs</h3></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><h3>Failed to load logs</h3></td></tr>';
+    }
+}
+
+async function restoreDeletedItem(deletedId) {
+    if (!confirm('Restore this item to the inventory?')) return;
+
+    try {
+        const response = await apiFetch(`/api/logs/deleted/${deletedId}/restore`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Failed to restore item');
+
+        showAlert('Item restored successfully!', 'success');
+        loadDeletedLogs();
+        loadInventory();
+        loadStats();
+    } catch (error) {
+        console.error('Error restoring item:', error);
+        if (error.message !== 'Session expired') {
+            showAlert(error.message, 'danger');
+        }
+    }
+}
+
+function openPermanentDeleteModal(deletedId) {
+    currentDeletedItemId = deletedId;
+    document.getElementById('permanentDeleteModal').value = '';
+    document.getElementById('permanentDeleteModal').classList.add('show');
+}
+
+function closePermanentDeleteModal() {
+    document.getElementById('permanentDeleteModal').classList.remove('show');
+    currentDeletedItemId = null;
+}
+
+async function confirmPermanentDelete(e) {
+    e.preventDefault();
+    
+    if (!currentDeletedItemId) return;
+
+    const reason = document.getElementById('permanentDeleteModal').value.trim() || 'Not specified';
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Deleting...';
+
+    try {
+        const response = await apiFetch(`/api/logs/deleted/${currentDeletedItemId}/permanent-delete`, {
+            method: 'DELETE',
+            body: JSON.stringify({ reason })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Failed to delete item');
+
+        showAlert('Item permanently deleted from logs', 'success');
+        closePermanentDeleteModal();
+        loadDeletedLogs();
+    } catch (error) {
+        console.error('Error deleting item:', error);
+        if (error.message !== 'Session expired') {
+            showAlert(error.message, 'danger');
+        }
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Permanently Delete';
     }
 }
 
@@ -872,7 +948,6 @@ async function deleteItem(id) {
 
         if (!response.ok) throw new Error('Failed to delete item');
 
-        // Delete from IndexedDB cache
         await deleteFromIndexedDB(id);
 
         showAlert('Item deleted successfully!', 'success');
@@ -886,7 +961,6 @@ async function deleteItem(id) {
     }
 }
 
-// --- Modified exportData to accept category/type and call filtered endpoint ---
 async function exportData(type = 'all') {
     if (!isOperator()) return;
     try {
@@ -922,7 +996,6 @@ async function exportData(type = 'all') {
     }
 }
 
-// --- Modified printInventory to fetch filtered JSON and build printable table ---
 async function printInventory(type = 'all') {
     if (!isOperator()) return;
     try {
@@ -1022,7 +1095,10 @@ function escapeHtml(text) {
 }
 
 function updateLastSync() {
-    document.getElementById('lastSync').textContent = new Date().toLocaleTimeString();
+    const lastSyncEl = document.getElementById('lastSync');
+    if (lastSyncEl) {
+        lastSyncEl.textContent = new Date().toLocaleTimeString();
+    }
 }
 
 document.addEventListener('keydown', (e) => {
@@ -1033,5 +1109,6 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         closeModal();
         closeProfileModal();
+        closePermanentDeleteModal();
     }
 });

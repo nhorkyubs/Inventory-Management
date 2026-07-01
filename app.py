@@ -646,7 +646,7 @@ def get_deleted_logs():
         conn = get_db_connection()
         c = conn.cursor()
         c.execute('''
-            SELECT id, description, rv_number, entry_by, deleted_by, deleted_at
+            SELECT id, original_id, description, rv_number, entry_by, deleted_by, deleted_at
             FROM deleted_inventory
             ORDER BY deleted_at DESC
             LIMIT 100
@@ -654,6 +654,92 @@ def get_deleted_logs():
         logs = [dict_from_row(c, row) for row in c.fetchall()]
         conn.close()
         return jsonify(logs), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/logs/deleted/<int:deleted_id>/restore', methods=['POST'])
+@admin_required
+def restore_deleted_item(deleted_id):
+    """Restore a deleted inventory item from the logs"""
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+
+        # Get the deleted item
+        c.execute('SELECT * FROM deleted_inventory WHERE id = %s', (deleted_id,))
+        result = c.fetchone()
+        if result is None:
+            conn.close()
+            return jsonify({'error': 'Deleted item not found'}), 404
+
+        deleted_item = dict_from_row(c, result)
+
+        # Try to restore to inventory table
+        try:
+            c.execute('''INSERT INTO inventory
+                (description, model, specs, date_acquired, amount, rv_number,
+                 po_number, acquired_by, location_installed, remarks, date_entry, entry_by, user_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+                (
+                    deleted_item.get('description'),
+                    deleted_item.get('model'),
+                    deleted_item.get('specs'),
+                    deleted_item.get('date_acquired'),
+                    deleted_item.get('amount'),
+                    deleted_item.get('rv_number'),
+                    deleted_item.get('po_number'),
+                    deleted_item.get('acquired_by'),
+                    deleted_item.get('location_installed'),
+                    deleted_item.get('remarks'),
+                    deleted_item.get('date_entry'),
+                    deleted_item.get('entry_by'),
+                    deleted_item.get('user_id')
+                )
+            )
+            conn.commit()
+
+            # Delete from deleted_inventory
+            c.execute('DELETE FROM deleted_inventory WHERE id = %s', (deleted_id,))
+            conn.commit()
+            conn.close()
+
+            return jsonify({'message': 'Item restored successfully'}), 200
+        except Error as e:
+            conn.close()
+            if 'duplicate key' in str(e).lower():
+                return jsonify({'error': 'Cannot restore: RV# already exists in inventory'}), 400
+            raise
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/logs/deleted/<int:deleted_id>/permanent-delete', methods=['DELETE'])
+@admin_required
+def permanent_delete_item(deleted_id):
+    """Permanently delete an item from the logs (cannot be recovered)"""
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+
+        # Verify the item exists
+        c.execute('SELECT id, rv_number FROM deleted_inventory WHERE id = %s', (deleted_id,))
+        result = c.fetchone()
+        if result is None:
+            conn.close()
+            return jsonify({'error': 'Deleted item not found'}), 404
+
+        rv_number = dict_from_row(c, result).get('rv_number')
+
+        # Permanently delete the record
+        c.execute('DELETE FROM deleted_inventory WHERE id = %s', (deleted_id,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'message': f'Item (RV#: {rv_number}) permanently deleted from logs',
+            'deleted_id': deleted_id
+        }), 200
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

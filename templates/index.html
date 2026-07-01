@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#2c3e50">
     <title>IT Equipment Inventory System</title>
     <link rel="manifest" href="/static/manifest.json">
-    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%232c3e50' width='192' height='192'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-size='120' fill='white' font-weight='bold'>📦</text></svg>">
+    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%232c3e50' width='192' height='192'/><text x='50%' y='50%' font-size='120' font-weight='bold' text-anchor='middle' dominant-baseline='central' fill='white'>I</text></svg>">
     <style>
         * {
             margin: 0;
@@ -279,6 +279,7 @@
         .action-btns {
             display: flex;
             gap: 8px;
+            flex-wrap: wrap;
         }
 
         .action-btns button {
@@ -801,7 +802,7 @@
                             <th>Amount</th>
                             <th>Date Acquired</th>
                             <th>Acquired By</th>
-                            <th id="inventoryLastCol">Actions</th>
+                            <th id="inventoryLastCol">Entry By</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody">
@@ -812,22 +813,20 @@
         </div>
 
         <!-- Reports Tab -->
-		<div id="reports" class="tab-content">
-			<div class="form-card">
-				<h2>Generate Reports</h2>
-		                <div style="margin-top: 20px; display: grid; gap: 10px;">
-							<select id="exportCategory" style="padding: 10px; font-size: 14px;">
-								<option value="all">All items</option>
-								<option value="devices">Devices</option>
-								<option value="consumables">Consumables</option>
-							</select>
-							
-						<button class="btn btn-success" onclick="exportData(document.getElementById('exportCategory').value)" style="width: 100%;">📊 Export as CSV</button>
-						<button class="btn btn-secondary" onclick="printInventory(document.getElementById('exportCategory').value)" style="width: 100%;">🖨️ Print Inventory</button>
-						
-						</div>
-					</div>
-				</div>
+        <div id="reports" class="tab-content">
+            <div class="form-card">
+                <h2>Generate Reports</h2>
+                <div style="margin-top: 20px; display: grid; gap: 10px;">
+                    <select id="exportCategory" style="padding: 10px; font-size: 14px;">
+                        <option value="all">All items</option>
+                        <option value="devices">Devices</option>
+                        <option value="consumables">Consumables</option>
+                    </select>
+                    <button class="btn btn-success" onclick="exportData(document.getElementById('exportCategory').value)" style="width: 100%;">📊 Export as CSV</button>
+                    <button class="btn btn-secondary" onclick="printInventory(document.getElementById('exportCategory').value)" style="width: 100%;">🖨️ Print Inventory</button>
+                </div>
+            </div>
+        </div>
 
         <!-- Admin Tab -->
         <div id="admin" class="tab-content">
@@ -872,10 +871,11 @@
                                 <th>Entry By</th>
                                 <th>Deleted By</th>
                                 <th>Deleted At</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="logsTableBody">
-                            <tr><td colspan="5" class="empty-state"><h3>Loading...</h3></td></tr>
+                            <tr><td colspan="6" class="empty-state"><h3>Loading...</h3></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -896,16 +896,16 @@
                         <label for="description">Description</label>
                         <input type="text" id="description" required placeholder="e.g., Laptop, Printer, Monitor">
                     </div>
-				<div class="form-group">
-					<label for="model">Model</label>
-					<input type="text" id="model" required placeholder="e.g., ThinkPad X13, HP LaserJet Pro">
+                    <div class="form-group">
+                        <label for="model">Model</label>
+                        <input type="text" id="model" required placeholder="e.g., ThinkPad X13, HP LaserJet Pro">
+                    </div>
                 </div>
 
                 <div class="form-group">
                     <label for="specs">Specifications</label>
                     <textarea id="specs" required placeholder="e.g., Intel i7, 16GB RAM, 512GB SSD"></textarea>
-					</div>
-				</div>
+                </div>
 
                 <div class="form-row">
                     <div class="form-group">
@@ -948,6 +948,27 @@
                 <div style="display: flex; gap: 10px;">
                     <button type="submit" class="btn btn-success" style="flex: 1;">Save Item</button>
                     <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="closeModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Permanent Delete Modal -->
+    <div id="permanentDeleteModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Permanently Delete Item</h2>
+                <button class="close-btn" onclick="closePermanentDeleteModal()">&times;</button>
+            </div>
+            <form onsubmit="confirmPermanentDelete(event)">
+                <div style="background: #fdf2f2; border: 1px solid #f5c6cb; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                    <p style="color: #721c24; font-size: 13px; margin: 0;">
+                        ⚠️ <strong>Warning:</strong> This action will permanently delete the item from the deletion logs. This cannot be undone.
+                    </p>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" class="btn btn-danger" style="flex: 1;">Permanently Delete</button>
+                    <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="closePermanentDeleteModal()">Cancel</button>
                 </div>
             </form>
         </div>
@@ -1001,25 +1022,12 @@
                         </div>
                         <div class="form-group">
                             <label for="confirmPassword">Confirm Password</label>
-                            <input type="password" id="confirmPassword" required minlength="6" placeholder="Re-enter new password">
+                            <input type="password" id="confirmPassword" required minlength="6" placeholder="Confirm new password">
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-secondary" style="width: 100%;">Update Password</button>
+                    <button type="submit" class="btn btn-success" style="width: 100%;">Change Password</button>
                 </div>
             </form>
-
-            <div class="profile-section">
-                <h3>Delete Account</h3>
-                <div class="profile-danger-zone">
-                    <div id="deleteAccountWarning" class="profile-item-warning" style="display:none;"></div>
-                    <p>Permanently delete your account and all associated data. This action cannot be undone.</p>
-                    <div class="form-group">
-                        <label for="deletePassword">Confirm with your password</label>
-                        <input type="password" id="deletePassword" placeholder="Enter password to confirm deletion">
-                    </div>
-                    <button type="button" class="btn btn-danger" id="deleteAccountBtn" onclick="deleteAccount()" style="width: 100%;">Delete My Account</button>
-                </div>
-            </div>
         </div>
     </div>
 

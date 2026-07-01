@@ -1,6 +1,6 @@
 BEFORE RUNNING APP.PY ON POWERSHELL;
-	$env:DATABASE_URL = 'postgresql://inventory_db_e9kn_user:AQJ9EiuAucPdjlQp71WSADDSuebMEeJY@dpg-d8sdv1kvikkc739j30b0-a.singapore-postgres.render.com/inventory_db_e9kn?sslmode=require'
+	$env:DATABASE_URL = 'postgresql://inventory_db_zgot_user:ptD3vrQH4lybnAPr5WYvvNTeqwW65wTV@dpg-d926omojs32c738brvhg-a.singapore-postgres.render.com/inventory_db_zgot'
 CMD;
-	set DATABASE_URL=postgresql://inventory_db_e9kn_user:AQJ9EiuAucPdjlQp71WSADDSuebMEeJY@dpg-d8sdv1kvikkc739j30b0-a.singapore-postgres.render.com/inventory_db_e9kn?sslmode=require
+	set DATABASE_URL=postgresql://inventory_db_zgot_user:ptD3vrQH4lybnAPr5WYvvNTeqwW65wTV@dpg-d926omojs32c738brvhg-a.singapore-postgres.render.com/inventory_db_zgot
 
 AFTER SETTING ENV VAR, PWEDE NA I-RUN
